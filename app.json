@@ -30,17 +30,7 @@
       "bundler": "metro",
       "favicon": "./assets/images/favicon.png"
     },
-    "plugins": [
-      "expo-router",
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/images/notification-icon.png",
-          "color": "#ffffff",
-          "sounds": ["./assets/sounds/notification.wav"]
-        }
-      ]
-    ],
+    "plugins": ["expo-router", "expo-notifications"],
     "experiments": {
       "typedRoutes": true,
       "tsconfigPaths": true
@@ -53,10 +43,10 @@
         "origin": false
       },
       "eas": {
-        "projectId": "your-project-id"
+        "projectId": "c555549b-4f14-4e52-aaed-67b44061f304"
       }
     },
-    "owner": "your-expo-username",
+    "owner": "simbolmina",
     "runtimeVersion": {
       "policy": "appVersion"
     },
