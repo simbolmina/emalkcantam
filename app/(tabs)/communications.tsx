@@ -151,8 +151,6 @@ export default function CommunicationsScreen() {
     );
   });
 
-  console.log('filteredCommunications', filteredCommunications);
-
   const filteredReminders = reminders.filter((comm) => {
     const searchLower = searchQuery.toLowerCase();
     return (

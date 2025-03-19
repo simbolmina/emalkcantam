@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, ScrollView, StyleSheet } from 'react-native';
+import { View, ScrollView, StyleSheet, Alert } from 'react-native';
 import {
   TextInput,
   Button,
@@ -27,11 +27,10 @@ interface FormData {
   customerId: string;
   customerName: string;
   customerPhone: string;
-  type: 'call' | 'message' | 'meeting';
+  type: CommunicationType;
   date: string;
   notes: string;
   reminder?: {
-    enabled: boolean;
     date: string;
     notes: string;
     completed: boolean;
@@ -40,7 +39,7 @@ interface FormData {
 }
 
 interface CommunicationFormProps {
-  initialData?: Communication;
+  initialData?: Partial<Communication>;
   onSubmit: (data: FormData) => Promise<Communication>;
   isLoading?: boolean;
 }
@@ -74,7 +73,6 @@ export const CommunicationForm: React.FC<CommunicationFormProps> = ({
     initialData?.date ? new Date(initialData.date) : new Date()
   );
 
-  // Initialize reminder-related state from initialData
   const [hasReminder, setHasReminder] = useState(!!initialData?.reminder);
   const [reminderDate, setReminderDate] = useState<Date>(
     initialData?.reminder?.date
@@ -88,6 +86,7 @@ export const CommunicationForm: React.FC<CommunicationFormProps> = ({
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showReminderDatePicker, setShowReminderDatePicker] = useState(false);
   const [showCustomerSelector, setShowCustomerSelector] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (initialData?.customerId) {
@@ -105,52 +104,73 @@ export const CommunicationForm: React.FC<CommunicationFormProps> = ({
       }
     } catch (error) {
       console.error('Error loading customer:', error);
+      Alert.alert('Hata', 'Müşteri bilgileri yüklenirken bir hata oluştu.');
     }
   };
 
   const handleSubmit = async () => {
-    const formData: FormData = {
-      customerId,
-      customerName,
-      customerPhone,
-      type,
-      date: date.toISOString(),
-      notes,
-      reminder: hasReminder
-        ? {
-            enabled: true,
-            date: reminderDate.toISOString(),
-            notes: reminderNotes,
-            completed: initialData?.reminder?.completed || false,
-          }
-        : undefined,
-    };
+    if (submitting) return;
 
     try {
+      setSubmitting(true);
+
+      // Validate required fields
+      if (!customerId || !customerName || !type || !date) {
+        Alert.alert('Hata', 'Lütfen tüm zorunlu alanları doldurun.');
+        return;
+      }
+
+      const formData: FormData = {
+        customerId,
+        customerName,
+        customerPhone,
+        type,
+        date: date.toISOString(),
+        notes,
+        reminder: hasReminder
+          ? {
+              date: reminderDate.toISOString(),
+              notes: reminderNotes,
+              completed: initialData?.reminder?.completed || false,
+            }
+          : undefined,
+      };
+
+      // Submit form data first
       const savedCommunication = await onSubmit(formData);
 
-      // Schedule notification if reminder is enabled
-      if (formData.reminder?.enabled && formData.reminder.date) {
-        const notificationId = await notificationService.scheduleNotification(
-          'İletişim Hatırlatması',
-          `${formData.customerName} ile iletişime geçin`,
-          new Date(formData.reminder.date),
-          {
-            communicationId: savedCommunication.id,
-            customerId: formData.customerId,
-            customerPhone: formData.customerPhone,
-            type: 'reminder',
-          }
-        );
+      // Only try to schedule notification if form submission was successful
+      if (savedCommunication && formData.reminder && formData.reminder.date) {
+        try {
+          const notificationId = await notificationService.scheduleNotification(
+            'İletişim Hatırlatması',
+            `${formData.customerName} ile iletişime geçin`,
+            new Date(formData.reminder.date),
+            {
+              communicationId: savedCommunication.id,
+              customerId: formData.customerId,
+              customerPhone: formData.customerPhone,
+              type: 'reminder',
+            }
+          );
 
-        if (notificationId && savedCommunication.reminder) {
-          // Update the communication with the notification ID
-          savedCommunication.reminder.notificationId = notificationId;
-          // You might need to update the communication here with the new notificationId
+          if (notificationId && savedCommunication.reminder) {
+            savedCommunication.reminder.notificationId = notificationId;
+          }
+        } catch (error) {
+          console.error('Error scheduling notification:', error);
+          // Don't block the form submission if notification fails
+          Alert.alert(
+            'Uyarı',
+            'İletişim kaydedildi fakat hatırlatma bildirimi ayarlanamadı.'
+          );
         }
       }
     } catch (error) {
       console.error('Error submitting form:', error);
+      Alert.alert('Hata', 'İletişim kaydedilirken bir hata oluştu.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
