@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, FlatList } from 'react-native';
+import { View, StyleSheet, FlatList, Linking } from 'react-native';
 import {
   Text,
   Card,
@@ -22,6 +22,7 @@ import {
 import { communicationStorage } from '../../src/services/communicationStorage';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
+import { notificationService } from '../../src/services/notificationService';
 
 const TypeIcons = {
   call: 'phone',
@@ -91,16 +92,44 @@ export default function CommunicationsScreen() {
     if (!communication.reminder) return;
 
     try {
+      // Cancel the notification if it exists
+      if (communication.reminder.notificationId) {
+        await notificationService.cancelNotification(
+          communication.reminder.notificationId
+        );
+      }
+
+      // Update the communication
       await communicationStorage.update(communication.id, {
         reminder: {
           ...communication.reminder,
           completed: true,
+          notificationId: undefined, // Remove the notification ID since it's cancelled
         },
       });
+
+      // Reload the data
       loadData();
     } catch (error) {
       console.error('Error completing reminder:', error);
     }
+  };
+
+  const handleCall = (phoneNumber: string) => {
+    Linking.openURL(`tel:${phoneNumber}`);
+  };
+
+  const handleMessage = (phoneNumber: string) => {
+    Linking.openURL(`sms:${phoneNumber}`);
+  };
+
+  const handleWhatsApp = (phoneNumber: string) => {
+    // Remove any non-numeric characters and ensure it starts with country code
+    const formattedNumber = phoneNumber.replace(/\D/g, '');
+    const whatsappNumber = formattedNumber.startsWith('90')
+      ? formattedNumber
+      : `90${formattedNumber}`;
+    Linking.openURL(`whatsapp://send?phone=${whatsappNumber}`);
   };
 
   const filteredCommunications = communications.filter((comm) => {
@@ -135,21 +164,25 @@ export default function CommunicationsScreen() {
     <Card style={styles.communicationCard}>
       <Card.Content>
         <View style={styles.communicationHeader}>
-          <View style={styles.customerInfo}>
-            <Text variant="titleMedium" style={styles.customerName}>
-              {item.customerName}
-            </Text>
-            <View style={styles.typeContainer}>
-              <Chip
-                icon={TypeIcons[item.type]}
-                mode="outlined"
-                style={styles.typeChip}
-                textStyle={styles.chipText}
-              >
-                {CommunicationTypeLabels[item.type]}
-              </Chip>
+          <TouchableRipple
+            onPress={() => router.push(`/customer/${item.customerId}`)}
+          >
+            <View style={styles.customerInfo}>
+              <Text variant="titleMedium" style={styles.customerName}>
+                {item.customerName}
+              </Text>
+              <View style={styles.typeContainer}>
+                <Chip
+                  icon={TypeIcons[item.type]}
+                  mode="outlined"
+                  style={styles.typeChip}
+                  textStyle={styles.chipText}
+                >
+                  {CommunicationTypeLabels[item.type]}
+                </Chip>
+              </View>
             </View>
-          </View>
+          </TouchableRipple>
           <Menu
             visible={menuVisible === item.id}
             onDismiss={() => setMenuVisible(null)}
@@ -208,6 +241,34 @@ export default function CommunicationsScreen() {
               />
             </View>
           )}
+        <View style={styles.quickActions}>
+          <IconButton
+            icon="phone"
+            mode="contained-tonal"
+            size={20}
+            onPress={() => handleCall(item.customerPhone || '')}
+          />
+          <IconButton
+            icon="message"
+            mode="contained-tonal"
+            size={20}
+            onPress={() => handleMessage(item.customerPhone || '')}
+          />
+          <IconButton
+            icon="whatsapp"
+            mode="contained-tonal"
+            size={20}
+            onPress={() => handleWhatsApp(item.customerPhone || '')}
+            containerColor="#25D366"
+            iconColor="#fff"
+          />
+          <IconButton
+            icon="account"
+            mode="contained-tonal"
+            size={20}
+            onPress={() => router.push(`/customer/${item.customerId}`)}
+          />
+        </View>
       </Card.Content>
     </Card>
   );
@@ -316,6 +377,7 @@ const styles = StyleSheet.create({
   customerInfo: {
     flex: 1,
     gap: 8,
+    paddingVertical: 4,
   },
   customerName: {
     fontWeight: '600',
@@ -386,5 +448,14 @@ const styles = StyleSheet.create({
   emptyText: {
     textAlign: 'center',
     opacity: 0.7,
+  },
+  quickActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
   },
 });

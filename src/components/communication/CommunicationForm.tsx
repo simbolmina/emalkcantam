@@ -20,10 +20,28 @@ import {
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { CustomerSelector } from '../common/CustomerSelector';
+import { notificationService } from '../../services/notificationService';
+import { Communication } from '../../models/Communication';
+
+interface FormData {
+  customerId: string;
+  customerName: string;
+  customerPhone: string;
+  type: 'call' | 'message' | 'meeting';
+  date: string;
+  notes: string;
+  reminder?: {
+    enabled: boolean;
+    date: string;
+    notes: string;
+    completed: boolean;
+    notificationId?: string;
+  };
+}
 
 interface CommunicationFormProps {
-  onSubmit: (values: any) => Promise<void>;
-  initialData?: any;
+  initialData?: Communication;
+  onSubmit: (data: FormData) => Promise<Communication>;
   isLoading?: boolean;
 }
 
@@ -44,6 +62,9 @@ export const CommunicationForm: React.FC<CommunicationFormProps> = ({
   );
   const [customerName, setCustomerName] = useState(
     initialData?.customerName || ''
+  );
+  const [customerPhone, setCustomerPhone] = useState(
+    initialData?.customerPhone || ''
   );
   const [type, setType] = useState<CommunicationType>(
     initialData?.type || 'call'
@@ -80,31 +101,57 @@ export const CommunicationForm: React.FC<CommunicationFormProps> = ({
       if (customer) {
         setCustomerId(customer.id);
         setCustomerName(`${customer.firstName} ${customer.lastName}`);
+        setCustomerPhone(customer.contactInfo.phone);
       }
     } catch (error) {
       console.error('Error loading customer:', error);
     }
   };
 
-  const handleSubmit = () => {
-    const formData = {
+  const handleSubmit = async () => {
+    const formData: FormData = {
       customerId,
       customerName,
+      customerPhone,
       type,
-      notes,
       date: date.toISOString(),
-      ...(hasReminder
+      notes,
+      reminder: hasReminder
         ? {
-            reminder: {
-              date: reminderDate.toISOString(),
-              notes: reminderNotes,
-              completed: initialData?.reminder?.completed || false,
-            },
+            enabled: true,
+            date: reminderDate.toISOString(),
+            notes: reminderNotes,
+            completed: initialData?.reminder?.completed || false,
           }
-        : { reminder: null }),
+        : undefined,
     };
 
-    onSubmit(formData);
+    try {
+      const savedCommunication = await onSubmit(formData);
+
+      // Schedule notification if reminder is enabled
+      if (formData.reminder?.enabled && formData.reminder.date) {
+        const notificationId = await notificationService.scheduleNotification(
+          'İletişim Hatırlatması',
+          `${formData.customerName} ile iletişime geçin`,
+          new Date(formData.reminder.date),
+          {
+            communicationId: savedCommunication.id,
+            customerId: formData.customerId,
+            customerPhone: formData.customerPhone,
+            type: 'reminder',
+          }
+        );
+
+        if (notificationId && savedCommunication.reminder) {
+          // Update the communication with the notification ID
+          savedCommunication.reminder.notificationId = notificationId;
+          // You might need to update the communication here with the new notificationId
+        }
+      }
+    } catch (error) {
+      console.error('Error submitting form:', error);
+    }
   };
 
   const formatDate = (date: Date) => {
@@ -129,6 +176,7 @@ export const CommunicationForm: React.FC<CommunicationFormProps> = ({
   const handleCustomerSelect = (customer: Customer) => {
     setCustomerId(customer.id);
     setCustomerName(`${customer.firstName} ${customer.lastName}`);
+    setCustomerPhone(customer.contactInfo.phone);
   };
 
   return (

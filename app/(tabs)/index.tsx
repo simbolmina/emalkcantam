@@ -136,8 +136,8 @@ export default function DashboardScreen() {
     <ScrollView style={styles.container}>
       <View style={styles.metricsContainer}>
         <Card style={[styles.metricCard, { backgroundColor: '#4CAF50' }]}>
-          <Card.Content>
-            <Text variant="titleLarge" style={styles.metricNumber}>
+          <Card.Content style={styles.metricContent}>
+            <Text variant="displaySmall" style={styles.metricNumber}>
               {metrics.activeProperties}
             </Text>
             <Text style={styles.metricLabel}>Aktif İlan</Text>
@@ -145,8 +145,8 @@ export default function DashboardScreen() {
         </Card>
 
         <Card style={[styles.metricCard, { backgroundColor: '#2196F3' }]}>
-          <Card.Content>
-            <Text variant="titleLarge" style={styles.metricNumber}>
+          <Card.Content style={styles.metricContent}>
+            <Text variant="displaySmall" style={styles.metricNumber}>
               {metrics.pendingProperties}
             </Text>
             <Text style={styles.metricLabel}>Görüşülen</Text>
@@ -154,8 +154,8 @@ export default function DashboardScreen() {
         </Card>
 
         <Card style={[styles.metricCard, { backgroundColor: '#FF9800' }]}>
-          <Card.Content>
-            <Text variant="titleLarge" style={styles.metricNumber}>
+          <Card.Content style={styles.metricContent}>
+            <Text variant="displaySmall" style={styles.metricNumber}>
               {metrics.soldThisMonth}
             </Text>
             <Text style={styles.metricLabel}>Bu Ay Satılan</Text>
@@ -163,8 +163,8 @@ export default function DashboardScreen() {
         </Card>
 
         <Card style={[styles.metricCard, { backgroundColor: '#9C27B0' }]}>
-          <Card.Content>
-            <Text variant="titleLarge" style={styles.metricNumber}>
+          <Card.Content style={styles.metricContent}>
+            <Text variant="displaySmall" style={styles.metricNumber}>
               {metrics.upcomingReminders}
             </Text>
             <Text style={styles.metricLabel}>Hatırlatma</Text>
@@ -287,22 +287,32 @@ const styles = StyleSheet.create({
   },
   metricCard: {
     width: '48%',
-    marginBottom: 16,
+    marginBottom: 12,
     elevation: 4,
+    borderRadius: 12,
+  },
+  metricContent: {
+    padding: 4,
+    alignItems: 'center',
   },
   metricNumber: {
     color: 'white',
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: 'bold',
+    textAlign: 'center',
+    paddingTop: 4,
   },
   metricLabel: {
     color: 'white',
-    fontSize: 14,
+    fontSize: 16,
     marginTop: 4,
+    marginBottom: 4,
+    textAlign: 'center',
   },
   card: {
     margin: 16,
     marginTop: 0,
+    borderRadius: 12,
   },
   divider: {
     marginVertical: 8,

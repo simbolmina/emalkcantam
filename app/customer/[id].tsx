@@ -168,8 +168,15 @@ export default function CustomerDetailsScreen() {
               <List.Item
                 title="Telefon"
                 description={customer.contactInfo.phone}
-                left={(props) => <List.Icon {...props} icon="phone" />}
+                left={(props) => (
+                  <List.Icon
+                    {...props}
+                    icon="phone"
+                    style={styles.contactIcon}
+                  />
+                )}
                 right={(props) => <List.Icon {...props} icon="phone-dial" />}
+                style={styles.contactItem}
               />
             </TouchableRipple>
 
@@ -182,8 +189,15 @@ export default function CustomerDetailsScreen() {
                 <List.Item
                   title="Alternatif Telefon"
                   description={customer.contactInfo.alternativePhone}
-                  left={(props) => <List.Icon {...props} icon="phone-plus" />}
+                  left={(props) => (
+                    <List.Icon
+                      {...props}
+                      icon="phone-plus"
+                      style={styles.contactIcon}
+                    />
+                  )}
                   right={(props) => <List.Icon {...props} icon="phone-dial" />}
+                  style={styles.contactItem}
                 />
               </TouchableRipple>
             )}
@@ -195,8 +209,15 @@ export default function CustomerDetailsScreen() {
                 <List.Item
                   title="E-posta"
                   description={customer.contactInfo.email}
-                  left={(props) => <List.Icon {...props} icon="email" />}
+                  left={(props) => (
+                    <List.Icon
+                      {...props}
+                      icon="email"
+                      style={styles.contactIcon}
+                    />
+                  )}
                   right={(props) => <List.Icon {...props} icon="email-send" />}
+                  style={styles.contactItem}
                 />
               </TouchableRipple>
             )}
@@ -303,6 +324,7 @@ export default function CustomerDetailsScreen() {
                     titleStyle={styles.communicationTitle}
                     description={comm.notes}
                     descriptionStyle={styles.communicationDescription}
+                    style={styles.contactItem}
                     left={(props) => (
                       <View style={styles.communicationIconContainer}>
                         <List.Icon
@@ -315,13 +337,13 @@ export default function CustomerDetailsScreen() {
                         </Text>
                       </View>
                     )}
-                    right={(props) => (
-                      <View style={styles.communicationMeta}>
-                        {comm.reminder && !comm.reminder.completed && (
+                    right={(props) =>
+                      comm.reminder && !comm.reminder.completed ? (
+                        <View style={styles.communicationMeta}>
                           <List.Icon {...props} icon="bell" color="#ffc107" />
-                        )}
-                      </View>
-                    )}
+                        </View>
+                      ) : null
+                    }
                   />
                 </TouchableRipple>
               ))}
@@ -449,14 +471,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   communicationIconContainer: {
+    width: 56,
     alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 8,
+    paddingLeft: 8,
   },
   communicationType: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#1976D2',
-    marginTop: -8,
+    marginTop: 2,
+    textAlign: 'center',
   },
   communicationTitle: {
     fontSize: 14,
@@ -472,5 +495,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
     minWidth: 40,
+  },
+  contactItem: {
+    minHeight: 72,
+  },
+  contactIcon: {
+    marginLeft: 8,
   },
 });

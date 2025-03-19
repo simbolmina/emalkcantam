@@ -10,6 +10,7 @@ export interface Communication {
   id: string;
   customerId: string;
   customerName: string;
+  customerPhone: string;
   type: CommunicationType;
   date: string; // ISO string
   notes: string;
