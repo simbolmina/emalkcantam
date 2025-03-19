@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, FlatList, Linking } from 'react-native';
+import { View, StyleSheet, FlatList, Linking, Alert } from 'react-native';
 import {
   Text,
   Card,
@@ -21,8 +21,9 @@ import {
 } from '../../src/models/Communication';
 import { communicationStorage } from '../../src/services/communicationStorage';
 import { format } from 'date-fns';
-import { tr } from 'date-fns/locale';
+import { fi, tr } from 'date-fns/locale';
 import { notificationService } from '../../src/services/notificationService';
+import { formatPhoneNumber } from '../../src/utils/phoneUtils';
 
 const TypeIcons = {
   call: 'phone',
@@ -116,20 +117,30 @@ export default function CommunicationsScreen() {
   };
 
   const handleCall = (phoneNumber: string) => {
-    Linking.openURL(`tel:${phoneNumber}`);
+    try {
+      const formattedNumber = formatPhoneNumber(phoneNumber);
+      Linking.openURL(`tel:${formattedNumber}`);
+    } catch (error) {
+      Alert.alert('Hata', 'Geçersiz telefon numarası');
+    }
   };
 
   const handleMessage = (phoneNumber: string) => {
-    Linking.openURL(`sms:${phoneNumber}`);
+    try {
+      const formattedNumber = formatPhoneNumber(phoneNumber);
+      Linking.openURL(`sms:${formattedNumber}`);
+    } catch (error) {
+      Alert.alert('Hata', 'Geçersiz telefon numarası');
+    }
   };
 
   const handleWhatsApp = (phoneNumber: string) => {
-    // Remove any non-numeric characters and ensure it starts with country code
-    const formattedNumber = phoneNumber.replace(/\D/g, '');
-    const whatsappNumber = formattedNumber.startsWith('90')
-      ? formattedNumber
-      : `90${formattedNumber}`;
-    Linking.openURL(`whatsapp://send?phone=${whatsappNumber}`);
+    try {
+      const formattedNumber = formatPhoneNumber(phoneNumber);
+      Linking.openURL(`whatsapp://send?phone=${formattedNumber}`);
+    } catch (error) {
+      Alert.alert('Hata', 'Geçersiz telefon numarası');
+    }
   };
 
   const filteredCommunications = communications.filter((comm) => {
@@ -139,6 +150,8 @@ export default function CommunicationsScreen() {
       comm.notes.toLowerCase().includes(searchLower)
     );
   });
+
+  console.log('filteredCommunications', filteredCommunications);
 
   const filteredReminders = reminders.filter((comm) => {
     const searchLower = searchQuery.toLowerCase();

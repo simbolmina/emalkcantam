@@ -1,6 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Communication } from '../models/Communication';
-import { v4 as uuidv4 } from 'uuid';
+
+// Simple UUID generation that doesn't rely on crypto
+const generateUUID = () => {
+  const timestamp = new Date().getTime();
+  const random = Math.floor(Math.random() * 10000);
+  return `${timestamp}-${random}`;
+};
 
 const STORAGE_KEY = '@communications';
 
@@ -40,17 +46,21 @@ export const communicationStorage = {
   ): Promise<Communication> {
     const now = new Date().toISOString();
     const newCommunication: Communication = {
-      id: uuidv4(),
+      id: generateUUID(),
       ...communication,
       createdAt: now,
       updatedAt: now,
     };
 
-    const communications = await this.getAll();
-    communications.push(newCommunication);
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(communications));
-
-    return newCommunication;
+    try {
+      const communications = await this.getAll();
+      communications.push(newCommunication);
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(communications));
+      return newCommunication;
+    } catch (error) {
+      console.error('Error adding communication:', error);
+      throw error;
+    }
   },
 
   async update(id: string, updates: Partial<Communication>): Promise<void> {

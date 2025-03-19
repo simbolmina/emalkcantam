@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, Linking } from 'react-native';
+import { View, StyleSheet, ScrollView, Linking, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter, Link } from 'expo-router';
 import {
   Text,
@@ -23,6 +23,10 @@ import { tradeStorage } from '../../src/services/tradeStorage';
 import { communicationStorage } from '../../src/services/communicationStorage';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
+import {
+  formatPhoneNumber,
+  formatPhoneForDisplay,
+} from '../../src/utils/phoneUtils';
 
 const CustomerTypeLabels = {
   buyer: 'Alıcı',
@@ -103,7 +107,30 @@ export default function CustomerDetailsScreen() {
   };
 
   const handleCall = (phoneNumber: string) => {
-    Linking.openURL(`tel:${phoneNumber}`);
+    try {
+      const formattedNumber = formatPhoneNumber(phoneNumber);
+      Linking.openURL(`tel:${formattedNumber}`);
+    } catch (error) {
+      Alert.alert('Hata', 'Geçersiz telefon numarası');
+    }
+  };
+
+  const handleMessage = (phoneNumber: string) => {
+    try {
+      const formattedNumber = formatPhoneNumber(phoneNumber);
+      Linking.openURL(`sms:${formattedNumber}`);
+    } catch (error) {
+      Alert.alert('Hata', 'Geçersiz telefon numarası');
+    }
+  };
+
+  const handleWhatsApp = (phoneNumber: string) => {
+    try {
+      const formattedNumber = formatPhoneNumber(phoneNumber);
+      Linking.openURL(`whatsapp://send?phone=${formattedNumber}`);
+    } catch (error) {
+      Alert.alert('Hata', 'Geçersiz telefon numarası');
+    }
   };
 
   const handleEmail = (email: string) => {
@@ -167,7 +194,7 @@ export default function CustomerDetailsScreen() {
             >
               <List.Item
                 title="Telefon"
-                description={customer.contactInfo.phone}
+                description={formatPhoneForDisplay(customer.contactInfo.phone)}
                 left={(props) => (
                   <List.Icon
                     {...props}
@@ -188,7 +215,9 @@ export default function CustomerDetailsScreen() {
               >
                 <List.Item
                   title="Alternatif Telefon"
-                  description={customer.contactInfo.alternativePhone}
+                  description={formatPhoneForDisplay(
+                    customer.contactInfo.alternativePhone!
+                  )}
                   left={(props) => (
                     <List.Icon
                       {...props}
