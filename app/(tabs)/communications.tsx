@@ -1,5 +1,12 @@
-import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, FlatList, Linking, Alert } from 'react-native';
+import React, { useState, useCallback, useEffect } from 'react';
+import {
+  View,
+  StyleSheet,
+  FlatList,
+  Linking,
+  Alert,
+  RefreshControl,
+} from 'react-native';
 import {
   Text,
   Card,
@@ -13,6 +20,7 @@ import {
   Divider,
   Menu,
   SegmentedButtons,
+  Button,
 } from 'react-native-paper';
 import { useRouter, useFocusEffect } from 'expo-router';
 import {
@@ -24,6 +32,7 @@ import { format } from 'date-fns';
 import { fi, tr } from 'date-fns/locale';
 import { notificationService } from '../../src/services/notificationService';
 import { formatPhoneNumber } from '../../src/utils/phoneUtils';
+import { useFocusEffect as useFocusEffectNavigation } from '@react-navigation/native';
 
 const TypeIcons = {
   call: 'phone',
@@ -40,6 +49,33 @@ export default function CommunicationsScreen() {
   const [menuVisible, setMenuVisible] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('communications');
   const router = useRouter();
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadCommunications = async () => {
+    try {
+      const data = await communicationStorage.getAll();
+      // Sort by date, most recent first
+      data.sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      );
+      setCommunications(data);
+    } catch (error) {
+      console.error('Error loading communications:', error);
+    }
+  };
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadCommunications();
+    setRefreshing(false);
+  }, []);
+
+  // Refresh data when screen is focused
+  useFocusEffectNavigation(
+    React.useCallback(() => {
+      loadCommunications();
+    }, [])
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -318,6 +354,9 @@ export default function CommunicationsScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderCommunicationItem}
           contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
         />
       ) : (
         <FlatList

@@ -1,6 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import * as Linking from 'expo-linking';
+import { communicationStorage } from './communicationStorage';
 
 // Configure notifications with interaction handler
 Notifications.setNotificationHandler({
@@ -8,6 +9,7 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
+    priority: Notifications.AndroidNotificationPriority.HIGH,
   }),
 });
 
@@ -23,10 +25,10 @@ export const NOTIFICATION_ACTIONS = {
   COMPLETE: 'COMPLETE',
 } as const;
 
-// Define the trigger type enum if not exported by expo-notifications
-enum SchedulableTriggerInputTypes {
-  DATE = 'date',
-}
+// Define the trigger type enum
+const TriggerType = {
+  TIME_INTERVAL: 'timeInterval',
+} as const;
 
 interface NotificationData {
   communicationId: string;
@@ -93,23 +95,70 @@ export const notificationService = {
         return null;
       }
 
-      // Schedule the notification
-      const identifier = await Notifications.scheduleNotificationAsync({
-        content: {
-          title,
-          body,
-          data,
-          sound: true,
-          priority: Notifications.AndroidNotificationPriority.HIGH,
-          categoryIdentifier: 'reminder',
-        },
-        trigger: {
-          date,
-          channelId: 'default',
-        },
+      // Calculate time until notification
+      const now = new Date();
+      const targetTime = new Date(date);
+
+      // Log scheduling attempt
+      console.log('Attempting to schedule notification:');
+      console.log('Current time:', now.toLocaleString());
+      console.log('Target time:', targetTime.toLocaleString());
+
+      // Ensure the target time is in the future
+      if (targetTime <= now) {
+        console.warn('Target time is in the past, skipping notification');
+        return null;
+      }
+
+      // Calculate seconds until notification (minimum 2 minutes)
+      const secondsUntilNotification = Math.max(
+        120,
+        Math.floor((targetTime.getTime() - now.getTime()) / 1000)
+      );
+
+      // Cancel any existing notifications
+      await Notifications.cancelAllScheduledNotificationsAsync();
+
+      // Create a promise that resolves when the notification should be shown
+      const notificationPromise = new Promise<string>((resolve) => {
+        setTimeout(async () => {
+          try {
+            const id = await Notifications.scheduleNotificationAsync({
+              content: {
+                title,
+                body,
+                data,
+                sound: true,
+              },
+              trigger: null, // Show immediately when the timeout completes
+            });
+            resolve(id);
+          } catch (error) {
+            console.error('Error showing notification:', error);
+            resolve('');
+          }
+        }, secondsUntilNotification * 1000);
       });
 
-      return identifier;
+      // Return a temporary ID immediately
+      const tempId = `temp-${Date.now()}`;
+      console.log('Scheduled notification with temp ID:', tempId);
+      console.log('Will show in:', secondsUntilNotification, 'seconds');
+      console.log(
+        'Expected time:',
+        new Date(
+          now.getTime() + secondsUntilNotification * 1000
+        ).toLocaleString()
+      );
+
+      // Start the timer but don't wait for it
+      notificationPromise.then((finalId) => {
+        if (finalId) {
+          console.log('Notification shown with final ID:', finalId);
+        }
+      });
+
+      return tempId;
     } catch (error) {
       console.error('Error scheduling notification:', error);
       return null;
@@ -126,6 +175,23 @@ export const notificationService = {
 
       const { communicationId, customerPhone } = data;
       const actionId = response.actionIdentifier;
+
+      // Mark the reminder as completed
+      try {
+        const communication = await communicationStorage.getById(
+          communicationId
+        );
+        if (communication && communication.reminder) {
+          communication.reminder.completed = true;
+          await communicationStorage.update(communicationId, communication);
+          console.log(
+            'Marked reminder as completed for communication:',
+            communicationId
+          );
+        }
+      } catch (error) {
+        console.error('Error marking reminder as completed:', error);
+      }
 
       // Format phone number for WhatsApp
       const formatPhoneForWhatsApp = (phone: string) => {

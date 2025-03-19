@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { CommunicationForm } from '../../src/components/communication/CommunicationForm';
 import { communicationStorage } from '../../src/services/communicationStorage';
 import { ActivityIndicator } from 'react-native-paper';
+import { useFocusEffect } from '@react-navigation/native';
 
 export default function EditCommunicationScreen() {
   const { id } = useLocalSearchParams();
@@ -26,6 +27,13 @@ export default function EditCommunicationScreen() {
       setLoading(false);
     }
   };
+
+  // Refresh data when screen is focused
+  useFocusEffect(
+    React.useCallback(() => {
+      loadCommunication();
+    }, [id])
+  );
 
   const handleSubmit = async (values: any) => {
     setSubmitting(true);

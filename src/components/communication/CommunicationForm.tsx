@@ -9,8 +9,9 @@ import {
   Switch,
   ActivityIndicator,
   Card,
+  Dialog,
+  TouchableRipple,
 } from 'react-native-paper';
-import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { Customer } from '../../models/Customer';
 import { customerStorage } from '../../services/customerStorage';
 import {
@@ -42,6 +43,13 @@ interface CommunicationFormProps {
   initialData?: Partial<Communication>;
   onSubmit: (data: FormData) => Promise<Communication>;
   isLoading?: boolean;
+}
+
+interface DateTimeDialogProps {
+  visible: boolean;
+  onDismiss: () => void;
+  currentDate: Date;
+  onConfirm: (date: Date) => void;
 }
 
 const COMMUNICATION_TYPES = Object.entries(CommunicationTypeLabels).map(
@@ -83,8 +91,9 @@ export const CommunicationForm: React.FC<CommunicationFormProps> = ({
     initialData?.reminder?.notes || ''
   );
 
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showReminderDatePicker, setShowReminderDatePicker] = useState(false);
+  const [showDateDialog, setShowDateDialog] = useState(false);
+  const [showReminderDialog, setShowReminderDialog] = useState(false);
+  const [tempDate, setTempDate] = useState(new Date());
   const [showCustomerSelector, setShowCustomerSelector] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -120,32 +129,103 @@ export const CommunicationForm: React.FC<CommunicationFormProps> = ({
         return;
       }
 
+      // Ensure dates are valid Date objects
+      const communicationDate = new Date(date);
+      let reminderDateObj = reminderDate;
+
+      // Validate communication date
+      if (isNaN(communicationDate.getTime())) {
+        Alert.alert('Hata', 'Geçersiz iletişim tarihi.');
+        return;
+      }
+
+      // Check if reminder is in the past
+      const now = new Date();
+      if (hasReminder && reminderDateObj <= now) {
+        // Ask user if they want to pick a new time
+        const userResponse = await new Promise<'cancel' | 'now' | 'pick'>(
+          (resolve) => {
+            Alert.alert(
+              'Uyarı',
+              'Hatırlatma zamanı geçmiş bir tarih için ayarlanmış.',
+              [
+                {
+                  text: 'İptal',
+                  onPress: () => resolve('cancel'),
+                  style: 'cancel',
+                },
+                { text: 'Yeni Zaman Seç', onPress: () => resolve('pick') },
+                {
+                  text: '5 Dakika Sonraya Ayarla',
+                  onPress: () => resolve('now'),
+                },
+              ]
+            );
+          }
+        );
+
+        if (userResponse === 'cancel') {
+          setSubmitting(false);
+          return;
+        }
+
+        if (userResponse === 'pick') {
+          setShowReminderDialog(true);
+          setSubmitting(false);
+          return;
+        }
+
+        // If user wants immediate reminder, set it to 5 minutes from now
+        reminderDateObj = new Date(now.getTime() + 5 * 60 * 1000);
+      }
+
+      // Ensure the reminder is at least 30 seconds in the future
+      const minimumDelay = 30 * 1000; // 30 seconds
+      if (
+        hasReminder &&
+        reminderDateObj.getTime() <= now.getTime() + minimumDelay
+      ) {
+        reminderDateObj = new Date(now.getTime() + 5 * 60 * 1000); // Set to 5 minutes in the future
+      }
+
       const formData: FormData = {
         customerId,
         customerName,
         customerPhone,
         type,
-        date: date.toISOString(),
+        date: communicationDate.toISOString(),
         notes,
         reminder: hasReminder
           ? {
-              date: reminderDate.toISOString(),
+              date: reminderDateObj.toISOString(),
               notes: reminderNotes,
               completed: initialData?.reminder?.completed || false,
             }
           : undefined,
       };
 
+      console.log(
+        'Submitting form with data:',
+        JSON.stringify(formData, null, 2)
+      );
+
       // Submit form data first
       const savedCommunication = await onSubmit(formData);
 
-      // Only try to schedule notification if form submission was successful
+      // Schedule notification if we have a valid reminder
       if (savedCommunication && formData.reminder && formData.reminder.date) {
         try {
+          const reminderTime = new Date(formData.reminder.date);
+
+          // Log notification scheduling attempt
+          console.log('Attempting to schedule notification:');
+          console.log('Reminder time:', reminderTime.toLocaleString());
+          console.log('Current time:', new Date().toLocaleString());
+
           const notificationId = await notificationService.scheduleNotification(
             'İletişim Hatırlatması',
             `${formData.customerName} ile iletişime geçin`,
-            new Date(formData.reminder.date),
+            reminderTime,
             {
               communicationId: savedCommunication.id,
               customerId: formData.customerId,
@@ -154,12 +234,23 @@ export const CommunicationForm: React.FC<CommunicationFormProps> = ({
             }
           );
 
-          if (notificationId && savedCommunication.reminder) {
-            savedCommunication.reminder.notificationId = notificationId;
+          if (notificationId) {
+            console.log(
+              'Notification scheduled successfully with ID:',
+              notificationId
+            );
+            if (savedCommunication.reminder) {
+              savedCommunication.reminder.notificationId = notificationId;
+            }
+          } else {
+            console.warn('Failed to schedule notification - no ID returned');
+            Alert.alert(
+              'Uyarı',
+              'İletişim kaydedildi fakat hatırlatma bildirimi ayarlanamadı.'
+            );
           }
         } catch (error) {
           console.error('Error scheduling notification:', error);
-          // Don't block the form submission if notification fails
           Alert.alert(
             'Uyarı',
             'İletişim kaydedildi fakat hatırlatma bildirimi ayarlanamadı.'
@@ -178,25 +269,126 @@ export const CommunicationForm: React.FC<CommunicationFormProps> = ({
     return format(date, 'dd MMM yyyy HH:mm', { locale: tr });
   };
 
-  const handleConfirmDate = (selectedDate: Date) => {
-    if (showDatePicker) {
+  const handleDateSelect = (selectedDate: Date) => {
+    if (showDateDialog) {
       setDate(selectedDate);
-    } else if (showReminderDatePicker) {
+      setShowDateDialog(false);
+    } else if (showReminderDialog) {
       setReminderDate(selectedDate);
+      setShowReminderDialog(false);
     }
-    setShowDatePicker(false);
-    setShowReminderDatePicker(false);
-  };
-
-  const handleCancelDate = () => {
-    setShowDatePicker(false);
-    setShowReminderDatePicker(false);
   };
 
   const handleCustomerSelect = (customer: Customer) => {
     setCustomerId(customer.id);
     setCustomerName(`${customer.firstName} ${customer.lastName}`);
     setCustomerPhone(customer.contactInfo.phone);
+  };
+
+  const DateTimeDialog: React.FC<DateTimeDialogProps> = ({
+    visible,
+    onDismiss,
+    currentDate,
+    onConfirm,
+  }) => {
+    const [dialogDate, setDialogDate] = useState(currentDate);
+    const [dateText, setDateText] = useState(format(currentDate, 'yyyy-MM-dd'));
+    const [timeText, setTimeText] = useState(format(currentDate, 'HH:mm'));
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+      if (visible) {
+        // Reset state when dialog opens
+        setDialogDate(currentDate);
+        setDateText(format(currentDate, 'yyyy-MM-dd'));
+        setTimeText(format(currentDate, 'HH:mm'));
+        setError('');
+      }
+    }, [visible, currentDate]);
+
+    const validateAndUpdateDate = () => {
+      try {
+        // Parse date components
+        const [year, month, day] = dateText.split('-').map(Number);
+        // Parse time components
+        const [hours, minutes] = timeText.split(':').map(Number);
+
+        // Check if all components are valid numbers
+        if (
+          isNaN(year) ||
+          isNaN(month) ||
+          isNaN(day) ||
+          isNaN(hours) ||
+          isNaN(minutes)
+        ) {
+          setError('Geçersiz tarih veya saat formatı');
+          return false;
+        }
+
+        // Create a new date with components
+        const newDate = new Date();
+        newDate.setFullYear(year);
+        newDate.setMonth(month - 1); // JavaScript months are 0-indexed
+        newDate.setDate(day);
+        newDate.setHours(hours);
+        newDate.setMinutes(minutes);
+        newDate.setSeconds(0);
+        newDate.setMilliseconds(0);
+
+        // Check if date is valid
+        if (isNaN(newDate.getTime())) {
+          setError('Geçersiz tarih');
+          return false;
+        }
+
+        // Update the dialog date and confirm
+        onConfirm(newDate);
+        return true;
+      } catch (error) {
+        console.error('Error parsing date:', error);
+        setError('Tarih işlenemedi');
+        return false;
+      }
+    };
+
+    const handleConfirm = () => {
+      validateAndUpdateDate();
+    };
+
+    return (
+      <Dialog visible={visible} onDismiss={onDismiss}>
+        <Dialog.Title>Tarih ve Saat Seç</Dialog.Title>
+        <Dialog.Content>
+          <TextInput
+            mode="outlined"
+            label="Tarih"
+            value={dateText}
+            onChangeText={setDateText}
+            placeholder="YYYY-MM-DD"
+            keyboardType="numeric"
+          />
+          <TextInput
+            mode="outlined"
+            label="Saat"
+            value={timeText}
+            onChangeText={setTimeText}
+            placeholder="HH:MM"
+            keyboardType="numeric"
+            style={{ marginTop: 8 }}
+          />
+          {error ? (
+            <Text style={{ color: 'red', marginTop: 8 }}>{error}</Text>
+          ) : null}
+          <Text style={{ marginTop: 8, opacity: 0.7 }}>
+            Örnek: 2023-01-31 ve 14:30
+          </Text>
+        </Dialog.Content>
+        <Dialog.Actions>
+          <Button onPress={onDismiss}>İptal</Button>
+          <Button onPress={handleConfirm}>Tamam</Button>
+        </Dialog.Actions>
+      </Dialog>
+    );
   };
 
   return (
@@ -235,7 +427,7 @@ export const CommunicationForm: React.FC<CommunicationFormProps> = ({
           </Text>
           <Button
             mode="outlined"
-            onPress={() => setShowDatePicker(true)}
+            onPress={() => setShowDateDialog(true)}
             style={styles.dateButton}
             icon="calendar"
           >
@@ -274,7 +466,7 @@ export const CommunicationForm: React.FC<CommunicationFormProps> = ({
             </Text>
             <Button
               mode="outlined"
-              onPress={() => setShowReminderDatePicker(true)}
+              onPress={() => setShowReminderDialog(true)}
               style={styles.dateButton}
               icon="calendar"
             >
@@ -310,20 +502,18 @@ export const CommunicationForm: React.FC<CommunicationFormProps> = ({
         onSelect={handleCustomerSelect}
       />
 
-      <DateTimePickerModal
-        isVisible={showDatePicker}
-        mode="datetime"
-        onConfirm={handleConfirmDate}
-        onCancel={handleCancelDate}
-        date={date}
+      <DateTimeDialog
+        visible={showDateDialog}
+        onDismiss={() => setShowDateDialog(false)}
+        currentDate={date}
+        onConfirm={handleDateSelect}
       />
 
-      <DateTimePickerModal
-        isVisible={showReminderDatePicker}
-        mode="datetime"
-        onConfirm={handleConfirmDate}
-        onCancel={handleCancelDate}
-        date={reminderDate}
+      <DateTimeDialog
+        visible={showReminderDialog}
+        onDismiss={() => setShowReminderDialog(false)}
+        currentDate={reminderDate}
+        onConfirm={handleDateSelect}
       />
     </ScrollView>
   );
