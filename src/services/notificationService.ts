@@ -1,7 +1,8 @@
 import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
+import { Platform, Alert } from 'react-native';
 import * as Linking from 'expo-linking';
 import { communicationStorage } from './communicationStorage';
+import Constants from 'expo-constants';
 
 // Configure notifications with interaction handler
 Notifications.setNotificationHandler({
@@ -12,6 +13,9 @@ Notifications.setNotificationHandler({
     priority: Notifications.AndroidNotificationPriority.HIGH,
   }),
 });
+
+// Store active timers
+const activeTimers: { [key: string]: NodeJS.Timeout } = {};
 
 // Define action types
 export const NOTIFICATION_ACTIONS = {
@@ -38,6 +42,26 @@ interface NotificationData {
 }
 
 let isSetupComplete = false;
+
+async function requestPermissionsIfNeeded() {
+  try {
+    const { status } = await Notifications.getPermissionsAsync();
+    console.log(`Current notification permission status: ${status}`);
+
+    if (status !== 'granted') {
+      console.log('Requesting notification permissions...');
+      const { status: newStatus } =
+        await Notifications.requestPermissionsAsync();
+      console.log(`New notification permission status: ${newStatus}`);
+      return newStatus === 'granted';
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Error checking notification permissions:', error);
+    return false;
+  }
+}
 
 export const notificationService = {
   async ensureSetup() {
@@ -88,13 +112,6 @@ export const notificationService = {
     data: NotificationData
   ) {
     try {
-      // Ensure setup is complete
-      const isReady = await this.ensureSetup();
-      if (!isReady) {
-        console.log('Notification setup failed, skipping notification');
-        return null;
-      }
-
       // Calculate time until notification
       const now = new Date();
       const targetTime = new Date(date);
@@ -106,59 +123,69 @@ export const notificationService = {
 
       // Ensure the target time is in the future
       if (targetTime <= now) {
-        console.warn('Target time is in the past, skipping notification');
-        return null;
+        console.warn(
+          'Target time is in the past, adjusting to 30 seconds from now'
+        );
+        targetTime.setTime(now.getTime() + 30000); // 30 seconds from now
       }
 
-      // Calculate seconds until notification (minimum 2 minutes)
-      const secondsUntilNotification = Math.max(
-        120,
-        Math.floor((targetTime.getTime() - now.getTime()) / 1000)
-      );
+      // Calculate milliseconds until notification
+      const timeUntilTarget = targetTime.getTime() - now.getTime();
 
-      // Cancel any existing notifications
-      await Notifications.cancelAllScheduledNotificationsAsync();
+      // Generate a unique ID for this notification timer
+      const timerId = `timer_${Date.now()}`;
 
-      // Create a promise that resolves when the notification should be shown
-      const notificationPromise = new Promise<string>((resolve) => {
-        setTimeout(async () => {
-          try {
-            const id = await Notifications.scheduleNotificationAsync({
-              content: {
-                title,
-                body,
-                data,
-                sound: true,
-              },
-              trigger: null, // Show immediately when the timeout completes
-            });
-            resolve(id);
-          } catch (error) {
-            console.error('Error showing notification:', error);
-            resolve('');
-          }
-        }, secondsUntilNotification * 1000);
-      });
-
-      // Return a temporary ID immediately
-      const tempId = `temp-${Date.now()}`;
-      console.log('Scheduled notification with temp ID:', tempId);
-      console.log('Will show in:', secondsUntilNotification, 'seconds');
       console.log(
-        'Expected time:',
-        new Date(
-          now.getTime() + secondsUntilNotification * 1000
-        ).toLocaleString()
+        `Setting up notification timer to fire in ${
+          timeUntilTarget / 1000
+        } seconds`
       );
+      console.log(`Expected time: ${targetTime.toLocaleString()}`);
 
-      // Start the timer but don't wait for it
-      notificationPromise.then((finalId) => {
-        if (finalId) {
-          console.log('Notification shown with final ID:', finalId);
-        }
+      // Request permissions first
+      await requestPermissionsIfNeeded().catch((err) => {
+        console.warn('Could not request permissions:', err);
       });
 
-      return tempId;
+      // Use JavaScript timeout to schedule the notification
+      activeTimers[timerId] = setTimeout(async () => {
+        try {
+          console.log(`Timer fired at ${new Date().toLocaleString()}`);
+
+          // Check permissions right before showing notification
+          await requestPermissionsIfNeeded().catch((err) => {
+            console.warn('Could not request permissions:', err);
+          });
+
+          // Show the notification immediately
+          const id = await Notifications.scheduleNotificationAsync({
+            content: {
+              title,
+              body,
+              data,
+              sound: true,
+            },
+            trigger: null, // null trigger shows immediately
+          }).catch((err) => {
+            console.error('Error scheduling immediate notification:', err);
+            return null;
+          });
+
+          if (id) {
+            console.log(`Notification displayed with ID: ${id}`);
+          } else {
+            console.warn('Could not show notification - no ID returned');
+          }
+
+          delete activeTimers[timerId];
+        } catch (error) {
+          console.error('Error showing notification:', error);
+          delete activeTimers[timerId];
+        }
+      }, timeUntilTarget);
+
+      console.log(`Timer set with ID: ${timerId}`);
+      return timerId;
     } catch (error) {
       console.error('Error scheduling notification:', error);
       return null;
@@ -257,5 +284,16 @@ export const notificationService = {
     } catch (error) {
       console.error('Error canceling all notifications:', error);
     }
+  },
+
+  // Also add a method to cancel a notification by timer ID
+  cancelTimer(timerId: string) {
+    if (activeTimers[timerId]) {
+      clearTimeout(activeTimers[timerId]);
+      delete activeTimers[timerId];
+      console.log(`Cancelled timer: ${timerId}`);
+      return true;
+    }
+    return false;
   },
 };

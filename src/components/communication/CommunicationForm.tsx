@@ -23,6 +23,7 @@ import { tr } from 'date-fns/locale';
 import { CustomerSelector } from '../common/CustomerSelector';
 import { notificationService } from '../../services/notificationService';
 import { Communication } from '../../models/Communication';
+import { communicationStorage } from '../../services/communicationStorage';
 
 interface FormData {
   customerId: string;
@@ -239,15 +240,30 @@ export const CommunicationForm: React.FC<CommunicationFormProps> = ({
               'Notification scheduled successfully with ID:',
               notificationId
             );
+
             if (savedCommunication.reminder) {
+              // Store the timer ID as the notification ID
               savedCommunication.reminder.notificationId = notificationId;
+
+              // Update the communication with the notification ID in storage
+              try {
+                await communicationStorage.update(
+                  savedCommunication.id,
+                  savedCommunication
+                );
+                console.log('Updated communication with notification ID');
+              } catch (updateError) {
+                console.error(
+                  'Error updating communication with notification ID:',
+                  updateError
+                );
+              }
             }
           } else {
             console.warn('Failed to schedule notification - no ID returned');
-            Alert.alert(
-              'Uyarı',
-              'İletişim kaydedildi fakat hatırlatma bildirimi ayarlanamadı.'
-            );
+
+            // Notification scheduled but ID is null - continue without showing error
+            // This is likely a permissions issue that was already shown to the user
           }
         } catch (error) {
           console.error('Error scheduling notification:', error);

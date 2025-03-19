@@ -125,30 +125,58 @@ export default function CommunicationsScreen() {
     }
   };
 
-  const handleCompleteReminder = async (communication: Communication) => {
-    if (!communication.reminder) return;
-
+  const handleToggleReminder = async (communication: Communication) => {
     try {
-      // Cancel the notification if it exists
-      if (communication.reminder.notificationId) {
-        await notificationService.cancelNotification(
-          communication.reminder.notificationId
-        );
+      if (!communication.reminder) return;
+
+      // Toggle the completed status
+      const newCompleted = !communication.reminder.completed;
+
+      // If marking as completed, cancel any pending notification
+      if (newCompleted && communication.reminder.notificationId) {
+        try {
+          // Try cancelling using the timer ID first
+          console.log(
+            `Attempting to cancel timer: ${communication.reminder.notificationId}`
+          );
+          const timerCancelled = notificationService.cancelTimer(
+            communication.reminder.notificationId
+          );
+
+          if (timerCancelled) {
+            console.log(
+              `Successfully cancelled timer: ${communication.reminder.notificationId}`
+            );
+          } else {
+            console.log(
+              `Timer not found, trying to cancel notification directly`
+            );
+            // Fall back to cancelling using Expo's API
+            await notificationService.cancelNotification(
+              communication.reminder.notificationId
+            );
+          }
+        } catch (error) {
+          console.error('Error cancelling notification:', error);
+          // Continue despite error - we still want to mark as completed
+        }
       }
 
-      // Update the communication
+      // Update the communication in storage
+      console.log(`Updating reminder completed status to: ${newCompleted}`);
       await communicationStorage.update(communication.id, {
+        ...communication,
         reminder: {
           ...communication.reminder,
-          completed: true,
-          notificationId: undefined, // Remove the notification ID since it's cancelled
+          completed: newCompleted,
         },
       });
 
-      // Reload the data
+      // Refresh the list
       loadData();
     } catch (error) {
-      console.error('Error completing reminder:', error);
+      console.error('Error toggling reminder:', error);
+      Alert.alert('Hata', 'Hatırlatma durumu güncellenirken bir hata oluştu.');
     }
   };
 
@@ -283,7 +311,7 @@ export default function CommunicationsScreen() {
               <IconButton
                 icon="check-circle"
                 size={24}
-                onPress={() => handleCompleteReminder(item)}
+                onPress={() => handleToggleReminder(item)}
                 style={styles.completeButton}
               />
             </View>
